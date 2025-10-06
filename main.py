@@ -32,6 +32,27 @@ def find_ebooks_in_calibre_library(calibre_library_path, supported_formats=None)
 
     return ebook_paths
 
+def filter_by_title(ebook_paths, search_term):
+    """
+    Filters ebooks by title using a case-insensitive search.
+
+    Parameters:
+        ebook_paths (list): List of ebook file paths.
+        search_term (str): Search term to filter titles.
+
+    Returns:
+        list: List of ebook paths that match the search term.
+    """
+    filtered_books = []
+    search_lower = search_term.lower()
+
+    for book_path in ebook_paths:
+        book_name = os.path.basename(book_path)
+        if search_lower in book_name.lower():
+            filtered_books.append(book_path)
+
+    return filtered_books
+
 def prompt_user_selection(ebook_paths):
     """
     Interactively asks the user whether to include each book for conversion.
@@ -120,13 +141,33 @@ if __name__ == "__main__":
     else:
         print(f"\nFound {len(ebook_paths)} ebooks in your library.")
 
-        # Step 2: Ask the user which books to convert
-        selected_books = prompt_user_selection(ebook_paths)
+        # Step 2: Filter by title (optional)
+        filter_choice = input("\nWould you like to filter by title? (y/n): ").strip().lower()
+
+        if filter_choice == 'y':
+            search_term = input("Enter search term for book title: ").strip()
+            ebook_paths = filter_by_title(ebook_paths, search_term)
+
+            if not ebook_paths:
+                print(f"No books found matching '{search_term}'. Exiting.")
+                exit(0)
+
+            print(f"\nFound {len(ebook_paths)} book(s) matching '{search_term}'.")
+
+            # Ask if user wants to convert all matching books
+            convert_all = input("Convert all matching books? (y/n): ").strip().lower()
+            if convert_all == 'y':
+                selected_books = ebook_paths
+            else:
+                selected_books = prompt_user_selection(ebook_paths)
+        else:
+            # Step 3: Ask the user which books to convert
+            selected_books = prompt_user_selection(ebook_paths)
 
         if not selected_books:
             print("No books selected for conversion. Exiting.")
         else:
             print(f"\nYou selected {len(selected_books)} book(s) for conversion.")
 
-            # Step 3: Apply Bionic Reading to the selected books
+            # Step 4: Apply Bionic Reading to the selected books
             apply_bionic_reading(selected_books, bionic_script_name)
