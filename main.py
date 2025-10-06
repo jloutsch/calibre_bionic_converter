@@ -146,6 +146,11 @@ if __name__ == "__main__":
 
         if filter_choice == 'y':
             search_term = input("Enter search term for book title: ").strip()
+
+            if not search_term:
+                print("Error: Search term cannot be empty. Exiting.")
+                exit(1)
+
             ebook_paths = filter_by_title(ebook_paths, search_term)
 
             if not ebook_paths:
