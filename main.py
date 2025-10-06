@@ -32,6 +32,38 @@ def find_ebooks_in_calibre_library(calibre_library_path, supported_formats=None)
 
     return ebook_paths
 
+def deduplicate_by_format(ebook_paths, preferred_format='epub'):
+    """
+    Removes duplicate books, keeping only one format per book.
+    Prefers the specified format if available.
+
+    Parameters:
+        ebook_paths (list): List of ebook file paths.
+        preferred_format (str): Preferred format to keep (default: 'epub').
+
+    Returns:
+        list: List of ebook paths with duplicates removed.
+    """
+    books_by_title = {}
+
+    for book_path in ebook_paths:
+        book_name = os.path.basename(book_path)
+        # Remove extension and _fastread suffix to get base title
+        base_name = os.path.splitext(book_name)[0]
+        base_name = base_name.replace('_fastread', '').replace(' - Fast Font', '')
+        file_ext = os.path.splitext(book_name)[1].lower()
+
+        if base_name not in books_by_title:
+            books_by_title[base_name] = book_path
+        else:
+            # If we already have this book, prefer the preferred format
+            current_ext = os.path.splitext(books_by_title[base_name])[1].lower()
+            # Replace if new format is preferred
+            if file_ext == f'.{preferred_format}':
+                books_by_title[base_name] = book_path
+
+    return list(books_by_title.values())
+
 def prompt_user_selection(ebook_paths):
     """
     Interactively asks the user whether to include each book for conversion.
@@ -120,7 +152,15 @@ if __name__ == "__main__":
     else:
         print(f"\nFound {len(ebook_paths)} ebooks in your library.")
 
-        # Step 2: Ask the user which books to convert
+        # Step 2: Remove duplicate formats (optional)
+        dedup_choice = input("\nRemove duplicate formats (keep one per book, prefer epub)? (y/n): ").strip().lower()
+        if dedup_choice == 'y':
+            original_count = len(ebook_paths)
+            ebook_paths = deduplicate_by_format(ebook_paths, preferred_format='epub')
+            dedup_count = original_count - len(ebook_paths)
+            print(f"Removed {dedup_count} duplicate(s). {len(ebook_paths)} unique book(s) remaining.")
+
+        # Step 3: Ask the user which books to convert
         selected_books = prompt_user_selection(ebook_paths)
 
         if not selected_books:
