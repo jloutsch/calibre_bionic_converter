@@ -4,6 +4,8 @@ import re
 import zipfile
 import tempfile
 import subprocess
+import shutil
+import argparse
 from bs4 import BeautifulSoup
 
 
@@ -43,7 +45,7 @@ def apply_bionic_reading_to_node(text_node, soup):
     text_node.replace_with(*new_contents)
 
 
-def process_htmlz(input_file, output_file, original_format):
+def process_htmlz(input_file, output_file, original_format, font_path=None):
     with tempfile.TemporaryDirectory() as tmpdir:
         # Convert ebook to HTMLZ format
         htmlz_file = os.path.join(tmpdir, "book.htmlz")
@@ -54,6 +56,13 @@ def process_htmlz(input_file, output_file, original_format):
         with zipfile.ZipFile(htmlz_file, "r") as zip_ref:
             zip_ref.extractall(tmpdir)
 
+        # Copy font file if provided
+        font_filename = None
+        if font_path and os.path.exists(font_path):
+            font_filename = os.path.basename(font_path)
+            font_dest = os.path.join(tmpdir, font_filename)
+            shutil.copy(font_path, font_dest)
+
         # Apply Bionic Reading effect to all HTML files
         for root, dirs, files in os.walk(tmpdir):
             for file in files:
@@ -61,6 +70,37 @@ def process_htmlz(input_file, output_file, original_format):
                     html_path = os.path.join(root, file)
                     with open(html_path, "r", encoding="utf-8") as f:
                         soup = BeautifulSoup(f, "html.parser")
+
+                    # Add custom font CSS if font is provided
+                    if font_filename:
+                        # Create @font-face rule
+                        font_ext = os.path.splitext(font_filename)[1].lower()
+                        font_format = {
+                            '.ttf': 'truetype',
+                            '.otf': 'opentype',
+                            '.woff': 'woff',
+                            '.woff2': 'woff2'
+                        }.get(font_ext, 'truetype')
+
+                        style_tag = soup.new_tag("style")
+                        style_tag.string = f"""
+                        @font-face {{
+                            font-family: 'BionicFont';
+                            src: url('{font_filename}') format('{font_format}');
+                        }}
+                        strong {{
+                            font-family: 'BionicFont', sans-serif;
+                            font-weight: bold;
+                        }}
+                        """
+                        if soup.head:
+                            soup.head.append(style_tag)
+                        else:
+                            head = soup.new_tag("head")
+                            head.append(style_tag)
+                            if soup.html:
+                                soup.html.insert(0, head)
+
                     # Process text nodes
                     for text_node in soup.find_all(string=True):
                         parent = text_node.parent.name if text_node.parent else None
@@ -94,20 +134,27 @@ def process_htmlz(input_file, output_file, original_format):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python bionic_reader.py input_file")
-        sys.exit(1)
-    input_file = sys.argv[1]
+    parser = argparse.ArgumentParser(description='Apply Bionic Reading formatting to ebooks')
+    parser.add_argument('input_file', help='Path to the ebook file to process')
+    parser.add_argument('--font', help='Path to custom font file to embed', default=None)
+
+    args = parser.parse_args()
+
+    input_file = args.input_file
+    font_path = args.font
+
     if not os.path.isfile(input_file):
         print("File not found.")
         sys.exit(1)
+
     file_name, file_ext = os.path.splitext(input_file)
     supported_formats = [".epub", ".mobi", ".azw3"]
     if file_ext.lower() not in supported_formats:
         print("Supported input formats are .epub, .mobi, and .azw3.")
         sys.exit(1)
+
     output_file = f"{file_name}_fastread{file_ext}"
-    process_htmlz(input_file, output_file, file_ext.lower()[1:])
+    process_htmlz(input_file, output_file, file_ext.lower()[1:], font_path=font_path)
     print(f"Processed file saved as {output_file}")
 
 
