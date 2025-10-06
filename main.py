@@ -20,7 +20,7 @@ def find_ebooks_in_calibre_library(calibre_library_path, supported_formats=None)
         list: List of full file paths to the ebooks found.
     """
     if supported_formats is None:
-        supported_formats = ['epub', 'mobi', 'pdf', 'azw3', 'fb2']  # Default formats
+        supported_formats = ['epub', 'mobi', 'azw3']  # Only formats supported by apply_bioread.py
 
     ebook_paths = []
 
