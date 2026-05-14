@@ -1,9 +1,19 @@
 import os
 import subprocess
+import sys
 import time
 from itertools import cycle
 from threading import Thread
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    print(
+        "Missing dependency: python-dotenv. Run "
+        "'source venv/bin/activate && python -m pip install -r requirements.txt' "
+        "from this repository, then run 'python main.py'."
+    )
+    sys.exit(1)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -222,7 +232,7 @@ def apply_bionic_reading(ebook_paths, bionic_script_name="bionic_reader.py", fon
         for ebook_path in ebook_paths:
             try:
                 # Call the Bionic Reading script with the current ebook as input
-                command = ["python", bionic_script_name, ebook_path]
+                command = [sys.executable, bionic_script_name, ebook_path]
                 if font_path:
                     command.extend(["--font", font_path])
                 subprocess.run(command, check=True)  # Runs the script and checks for errors

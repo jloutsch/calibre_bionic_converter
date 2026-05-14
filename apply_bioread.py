@@ -6,7 +6,16 @@ import tempfile
 import subprocess
 import shutil
 import argparse
-from bs4 import BeautifulSoup
+
+try:
+    from bs4 import BeautifulSoup
+except ModuleNotFoundError:
+    print(
+        "Missing dependency: beautifulsoup4. Run "
+        "'source venv/bin/activate && python -m pip install -r requirements.txt' "
+        "from this repository, then run 'python main.py'."
+    )
+    sys.exit(1)
 
 
 def apply_bionic_reading_to_node(text_node, soup):

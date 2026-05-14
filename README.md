@@ -15,30 +15,48 @@ This script scans your Calibre library for eBooks, allows you to select which bo
 ## Prerequisites
 
 1. **Python 3.8 or higher** installed on your system.
-2. **Dependencies**: Install required Python libraries using:
+2. **Virtual environment**: Use the project virtual environment so dependencies are installed separately from Homebrew or macOS Python:
    ```bash
-   pip install python-dotenv
-3. Calibre Library Path: Ensure your .env file includes the following:
-   ```lua
-   CALIBRE_LIBRARY_PATH=C:\path\to\your\calibre\library
+   source venv/bin/activate
+   ```
+   If the `venv/` directory does not exist, create it first:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+3. **Dependencies**: Install required Python libraries using:
+   ```bash
+   python -m pip install -r requirements.txt
+   ```
+4. Calibre Library Path: Ensure your .env file includes the following:
+   ```bash
+   CALIBRE_LIBRARY_PATH=/path/to/your/calibre/library
+   ```
 Replace the path with the actual location of your Calibre library.
-4. Bionic Reading Script: Download the Bionic Reading script apply_bioread.py from (arcanite24/libre-bioread)[https://github.com/arcanite24/libre-bioread] and place it in the same directory as this script.
 
 ## Usage
 
 1. **Prepare Your Environment**:
    - Ensure Python 3.8 or higher is installed on your system.
+   - Activate the local virtual environment:
+     ```bash
+     source venv/bin/activate
+     ```
    - Set your Calibre library path in a `.env` file with the following format:
      ```
-     CALIBRE_LIBRARY_PATH=C:\path\to\your\calibre\library
+     CALIBRE_LIBRARY_PATH=/path/to/your/calibre/library
      ```
      Replace the path with the actual location of your Calibre library.
-   - Download the `apply_bioread.py` script from [arcanite24/libre-bioread](https://github.com/arcanite24/libre-bioread) and place it in the same directory as this script.
+   - Install dependencies with:
+     ```bash
+     python -m pip install -r requirements.txt
+     ```
 
 2. **Run the Script**:
    Execute the script using:
    ```bash
    python main.py
+   ```
 3. Follow the prompts: 
     - The script will scan your Calibre library for eBooks and display a count of the files found.
     - For each book, it will ask:
