@@ -54,6 +54,33 @@ def apply_bionic_reading_to_node(text_node, soup):
     text_node.replace_with(*new_contents)
 
 
+def remove_line_height_declarations(css_text):
+    return re.sub(r"(?i)\s*line-height\s*:\s*[^;}\"]+;?", "", css_text)
+
+
+def remove_fixed_line_spacing(soup):
+    for tag in soup.find_all(style=True):
+        cleaned_style = remove_line_height_declarations(tag["style"]).strip()
+        if cleaned_style:
+            tag["style"] = cleaned_style
+        else:
+            del tag["style"]
+
+    for style_tag in soup.find_all("style"):
+        if style_tag.string:
+            style_tag.string.replace_with(remove_line_height_declarations(style_tag.string))
+
+
+def remove_fixed_line_spacing_from_css_file(css_path):
+    with open(css_path, "r", encoding="utf-8") as f:
+        css = f.read()
+
+    cleaned_css = remove_line_height_declarations(css)
+    if cleaned_css != css:
+        with open(css_path, "w", encoding="utf-8") as f:
+            f.write(cleaned_css)
+
+
 def font_format_for_file(filename):
     font_ext = os.path.splitext(filename)[1].lower()
     return {
@@ -185,10 +212,14 @@ def process_htmlz(input_file, output_file, original_format, font_path=None, font
         # Apply Bionic Reading effect to all HTML files
         for root, dirs, files in os.walk(tmpdir):
             for file in files:
-                if file.endswith(".html") or file.endswith(".htm"):
+                if file.endswith(".css"):
+                    remove_fixed_line_spacing_from_css_file(os.path.join(root, file))
+                elif file.endswith(".html") or file.endswith(".htm"):
                     html_path = os.path.join(root, file)
                     with open(html_path, "r", encoding="utf-8") as f:
                         soup = BeautifulSoup(f, "html.parser")
+
+                    remove_fixed_line_spacing(soup)
 
                     # Add custom font CSS if fonts are provided
                     if font_faces:

@@ -9,7 +9,8 @@ This script scans your Calibre library for eBooks, allows you to select which bo
 2. Interactively prompts you to select which books to convert.
 3. Applies Bionic Reading typography to the selected books using the `apply_bioread.py` script.
 4. Optionally embeds the font family from `fonts/`, using regular, bold, italic, and bold italic faces where appropriate.
-5. Provides a visual loading spinner during the conversion process.
+5. Removes fixed `line-height` styling so ereader line spacing controls can still work.
+6. Provides a visual loading spinner during the conversion process.
 
 ---
 
