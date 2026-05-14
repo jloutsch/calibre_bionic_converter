@@ -171,14 +171,14 @@ def list_available_fonts(fonts_dir="fonts"):
 
     return sorted(fonts)
 
-def select_font():
+def select_font_directory(fonts_dir="fonts"):
     """
-    Prompts user to select a font from available fonts.
+    Prompts user to use all available fonts from the fonts directory.
 
     Returns:
-        str or None: Path to selected font file, or None if no font selected.
+        str or None: Path to fonts directory, or None if default formatting should be used.
     """
-    fonts = list_available_fonts()
+    fonts = list_available_fonts(fonts_dir)
 
     if not fonts:
         print("\nNo fonts found in 'fonts/' directory.")
@@ -188,38 +188,22 @@ def select_font():
             exit(0)
         return None
 
-    print("\nAvailable fonts:")
-    for i, font_path in enumerate(fonts, 1):
-        font_name = os.path.basename(font_path)
-        print(f"{i}. {font_name}")
+    print(f"\nFound {len(fonts)} font file(s) in 'fonts/'.")
+    use_fonts = input("Embed these fonts as a family for converted books? (y/n): ").strip().lower()
+    if use_fonts == 'y':
+        return fonts_dir
 
-    print(f"{len(fonts) + 1}. Use default bold formatting (no custom font)")
+    print("Using default bold formatting")
+    return None
 
-    while True:
-        try:
-            choice = input(f"\nSelect font (1-{len(fonts) + 1}): ").strip()
-            choice_num = int(choice)
-
-            if 1 <= choice_num <= len(fonts):
-                selected_font = fonts[choice_num - 1]
-                print(f"Selected: {os.path.basename(selected_font)}")
-                return selected_font
-            elif choice_num == len(fonts) + 1:
-                print("Using default bold formatting")
-                return None
-            else:
-                print(f"Please enter a number between 1 and {len(fonts) + 1}")
-        except ValueError:
-            print("Please enter a valid number")
-
-def apply_bionic_reading(ebook_paths, bionic_script_name="bionic_reader.py", font_path=None):
+def apply_bionic_reading(ebook_paths, bionic_script_name="bionic_reader.py", font_dir=None):
     """
     Applies Bionic Reading typography to each ebook using the script from the repository.
 
     Parameters:
         ebook_paths (list): List of ebook file paths to process.
         bionic_script_name (str): Name of the script in the current repository that applies Bionic Reading.
-        font_path (str, optional): Path to custom font file to embed.
+        font_dir (str, optional): Path to custom font directory to embed.
 
     Returns:
         None
@@ -233,8 +217,8 @@ def apply_bionic_reading(ebook_paths, bionic_script_name="bionic_reader.py", fon
             try:
                 # Call the Bionic Reading script with the current ebook as input
                 command = [sys.executable, bionic_script_name, ebook_path]
-                if font_path:
-                    command.extend(["--font", font_path])
+                if font_dir:
+                    command.extend(["--font-dir", font_dir])
                 subprocess.run(command, check=True)  # Runs the script and checks for errors
             except subprocess.CalledProcessError as e:
                 print(f"Error processing {ebook_path}: {e}")
@@ -312,8 +296,8 @@ if __name__ == "__main__":
         else:
             print(f"\nYou selected {len(selected_books)} book(s) for conversion.")
 
-            # Step 6: Select font for conversion
-            selected_font = select_font()
+            # Step 6: Select font handling for conversion
+            selected_font_dir = select_font_directory()
 
             # Step 7: Apply Bionic Reading to the selected books
-            apply_bionic_reading(selected_books, bionic_script_name, font_path=selected_font)
+            apply_bionic_reading(selected_books, bionic_script_name, font_dir=selected_font_dir)

@@ -5,10 +5,11 @@ This script scans your Calibre library for eBooks, allows you to select which bo
 ---
 
 ## Features
-1. Scans your Calibre library to find all supported eBook formats (e.g., `.epub`, `.mobi`, `.pdf`, etc.).
+1. Scans your Calibre library to find supported eBook formats (`.epub`, `.mobi`, `.azw3`).
 2. Interactively prompts you to select which books to convert.
 3. Applies Bionic Reading typography to the selected books using the `apply_bioread.py` script.
-4. Provides a visual loading spinner during the conversion process.
+4. Optionally embeds the font family from `fonts/`, using regular, bold, italic, and bold italic faces where appropriate.
+5. Provides a visual loading spinner during the conversion process.
 
 ---
 
@@ -59,6 +60,7 @@ Replace the path with the actual location of your Calibre library.
    ```
 3. Follow the prompts: 
     - The script will scan your Calibre library for eBooks and display a count of the files found.
+    - If font files exist in `fonts/`, choose whether to embed them as a family. You do not need to select an individual font file.
     - For each book, it will ask:
    ```sql
    Would you like to convert 'example_book.epub'? (y/n):
@@ -67,7 +69,7 @@ Replace the path with the actual location of your Calibre library.
     -The selected books will be processed, and you’ll see a loading spinner during the conversion process. Once completed, a message will confirm the conversion.
 
 ### Supported Formats
-By default, the script supports the following eBook formats:.epub, .mobi, .pdf, .azw3, .fb2
+By default, the script supports the following eBook formats: `.epub`, `.mobi`, `.azw3`.
 
 You can customize this list in the find_ebooks_in_calibre_library function by modifying the supported_formats parameter.
 

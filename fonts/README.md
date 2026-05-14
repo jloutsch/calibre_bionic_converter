@@ -10,11 +10,12 @@ Place your custom font files here to use them for Bionic Reading conversion.
 
 ## Usage
 1. Copy your font files into this directory
-2. When running the conversion script, you'll be prompted to select from available fonts
-3. The selected font will be embedded in the converted ebooks and applied to the bolded text
+2. When running the conversion script, choose to embed fonts from this directory
+3. The converter will automatically use regular, bold, italic, and bold italic files where appropriate throughout the converted ebook
 
 ## Font Recommendations
 For best Bionic Reading results, consider using fonts that have:
 - Clear distinction between regular and bold weights
+- Regular, bold, italic, and bold italic variants
 - Good readability at various sizes
 - Professional design optimized for reading

@@ -54,7 +54,98 @@ def apply_bionic_reading_to_node(text_node, soup):
     text_node.replace_with(*new_contents)
 
 
-def process_htmlz(input_file, output_file, original_format, font_path=None):
+def font_format_for_file(filename):
+    font_ext = os.path.splitext(filename)[1].lower()
+    return {
+        ".ttf": "truetype",
+        ".otf": "opentype",
+        ".woff": "woff",
+        ".woff2": "woff2",
+    }.get(font_ext, "truetype")
+
+
+def infer_font_face(filename):
+    name = os.path.splitext(filename)[0].lower().replace("-", "_").replace(" ", "_")
+    is_bold = "bold" in name
+    is_italic = "italic" in name or "oblique" in name
+
+    if is_bold and is_italic:
+        return "700", "italic"
+    if is_bold:
+        return "700", "normal"
+    if is_italic:
+        return "400", "italic"
+    return "400", "normal"
+
+
+def list_font_faces(font_dir):
+    if not font_dir or not os.path.isdir(font_dir):
+        return []
+
+    font_extensions = {".ttf", ".otf", ".woff", ".woff2"}
+    extension_rank = {".woff2": 0, ".otf": 1, ".ttf": 2, ".woff": 3}
+    candidates = []
+
+    for filename in os.listdir(font_dir):
+        ext = os.path.splitext(filename)[1].lower()
+        if ext in font_extensions:
+            weight, style = infer_font_face(filename)
+            candidates.append({
+                "source_path": os.path.join(font_dir, filename),
+                "filename": filename,
+                "weight": weight,
+                "style": style,
+                "rank": extension_rank.get(ext, 99),
+            })
+
+    selected = {}
+    for candidate in sorted(candidates, key=lambda item: (item["weight"], item["style"], item["rank"], item["filename"])):
+        key = (candidate["weight"], candidate["style"])
+        if key not in selected:
+            selected[key] = candidate
+
+    return list(selected.values())
+
+
+def build_font_css(font_faces, font_url_prefix="fonts"):
+    if not font_faces:
+        return ""
+
+    css_blocks = []
+    for face in font_faces:
+        font_format = font_format_for_file(face["filename"])
+        css_blocks.append(f"""
+@font-face {{
+    font-family: 'BionicFont';
+    src: url('{font_url_prefix}/{face["filename"]}') format('{font_format}');
+    font-weight: {face["weight"]};
+    font-style: {face["style"]};
+}}
+""".strip())
+
+    css_blocks.append("""
+html, body {
+    font-family: 'BionicFont', sans-serif;
+}
+strong, b {
+    font-family: 'BionicFont', sans-serif;
+    font-weight: 700;
+}
+em, i {
+    font-family: 'BionicFont', sans-serif;
+    font-style: italic;
+}
+strong em, strong i, b em, b i, em strong, i strong, em b, i b {
+    font-family: 'BionicFont', sans-serif;
+    font-weight: 700;
+    font-style: italic;
+}
+""".strip())
+
+    return "\n\n".join(css_blocks)
+
+
+def process_htmlz(input_file, output_file, original_format, font_path=None, font_dir=None):
     with tempfile.TemporaryDirectory() as tmpdir:
         # Convert ebook to HTMLZ format
         htmlz_file = os.path.join(tmpdir, "book.htmlz")
@@ -65,12 +156,31 @@ def process_htmlz(input_file, output_file, original_format, font_path=None):
         with zipfile.ZipFile(htmlz_file, "r") as zip_ref:
             zip_ref.extractall(tmpdir)
 
-        # Copy font file if provided
-        font_filename = None
+        font_faces = []
+        fonts_tmpdir = os.path.join(tmpdir, "fonts")
+
+        # Copy a single font file if provided for backward-compatible CLI usage.
         if font_path and os.path.exists(font_path):
+            os.makedirs(fonts_tmpdir, exist_ok=True)
             font_filename = os.path.basename(font_path)
-            font_dest = os.path.join(tmpdir, font_filename)
+            weight, style = infer_font_face(font_filename)
+            font_dest = os.path.join(fonts_tmpdir, font_filename)
             shutil.copy(font_path, font_dest)
+            font_faces.append({
+                "filename": font_filename,
+                "weight": weight,
+                "style": style,
+            })
+
+        # Copy all matching font faces if a directory is provided.
+        for face in list_font_faces(font_dir):
+            os.makedirs(fonts_tmpdir, exist_ok=True)
+            shutil.copy(face["source_path"], os.path.join(fonts_tmpdir, face["filename"]))
+            font_faces.append({
+                "filename": face["filename"],
+                "weight": face["weight"],
+                "style": face["style"],
+            })
 
         # Apply Bionic Reading effect to all HTML files
         for root, dirs, files in os.walk(tmpdir):
@@ -80,28 +190,12 @@ def process_htmlz(input_file, output_file, original_format, font_path=None):
                     with open(html_path, "r", encoding="utf-8") as f:
                         soup = BeautifulSoup(f, "html.parser")
 
-                    # Add custom font CSS if font is provided
-                    if font_filename:
-                        # Create @font-face rule
-                        font_ext = os.path.splitext(font_filename)[1].lower()
-                        font_format = {
-                            '.ttf': 'truetype',
-                            '.otf': 'opentype',
-                            '.woff': 'woff',
-                            '.woff2': 'woff2'
-                        }.get(font_ext, 'truetype')
-
+                    # Add custom font CSS if fonts are provided
+                    if font_faces:
+                        font_url_prefix = os.path.relpath(fonts_tmpdir, os.path.dirname(html_path)).replace(os.sep, "/")
+                        font_css = build_font_css(font_faces, font_url_prefix=font_url_prefix)
                         style_tag = soup.new_tag("style")
-                        style_tag.string = f"""
-                        @font-face {{
-                            font-family: 'BionicFont';
-                            src: url('{font_filename}') format('{font_format}');
-                        }}
-                        strong {{
-                            font-family: 'BionicFont', sans-serif;
-                            font-weight: bold;
-                        }}
-                        """
+                        style_tag.string = font_css
                         if soup.head:
                             soup.head.append(style_tag)
                         else:
@@ -146,11 +240,13 @@ def main():
     parser = argparse.ArgumentParser(description='Apply Bionic Reading formatting to ebooks')
     parser.add_argument('input_file', help='Path to the ebook file to process')
     parser.add_argument('--font', help='Path to custom font file to embed', default=None)
+    parser.add_argument('--font-dir', help='Path to directory of font family files to embed', default=None)
 
     args = parser.parse_args()
 
     input_file = args.input_file
     font_path = args.font
+    font_dir = args.font_dir
 
     if not os.path.isfile(input_file):
         print("File not found.")
@@ -163,7 +259,7 @@ def main():
         sys.exit(1)
 
     output_file = f"{file_name}_fastread{file_ext}"
-    process_htmlz(input_file, output_file, file_ext.lower()[1:], font_path=font_path)
+    process_htmlz(input_file, output_file, file_ext.lower()[1:], font_path=font_path, font_dir=font_dir)
     print(f"Processed file saved as {output_file}")
 
 
