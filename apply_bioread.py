@@ -81,6 +81,17 @@ def remove_fixed_line_spacing_from_css_file(css_path):
             f.write(cleaned_css)
 
 
+def safe_extract_zip(zip_file, destination):
+    destination_path = os.path.realpath(destination)
+
+    for member in zip_file.infolist():
+        member_path = os.path.realpath(os.path.join(destination, member.filename))
+        if member_path != destination_path and not member_path.startswith(destination_path + os.sep):
+            raise ValueError(f"Unsafe path in archive: {member.filename}")
+
+    zip_file.extractall(destination)
+
+
 def font_format_for_file(filename):
     font_ext = os.path.splitext(filename)[1].lower()
     return {
@@ -103,6 +114,11 @@ def infer_font_face(filename):
     if is_italic:
         return "400", "italic"
     return "400", "normal"
+
+
+def safe_font_filename(index, filename):
+    ext = os.path.splitext(filename)[1].lower()
+    return f"font_{index}{ext}"
 
 
 def list_font_faces(font_dir):
@@ -131,7 +147,11 @@ def list_font_faces(font_dir):
         if key not in selected:
             selected[key] = candidate
 
-    return list(selected.values())
+    selected_faces = list(selected.values())
+    for index, face in enumerate(selected_faces, 1):
+        face["safe_filename"] = safe_font_filename(index, face["filename"])
+
+    return selected_faces
 
 
 def build_font_css(font_faces, font_url_prefix="fonts"):
@@ -140,11 +160,12 @@ def build_font_css(font_faces, font_url_prefix="fonts"):
 
     css_blocks = []
     for face in font_faces:
-        font_format = font_format_for_file(face["filename"])
+        font_filename = face["safe_filename"]
+        font_format = font_format_for_file(font_filename)
         css_blocks.append(f"""
 @font-face {{
     font-family: 'BionicFont';
-    src: url('{font_url_prefix}/{face["filename"]}') format('{font_format}');
+    src: url('{font_url_prefix}/{font_filename}') format('{font_format}');
     font-weight: {face["weight"]};
     font-style: {face["style"]};
 }}
@@ -181,7 +202,7 @@ def process_htmlz(input_file, output_file, original_format, font_path=None, font
 
         # Extract HTMLZ contents
         with zipfile.ZipFile(htmlz_file, "r") as zip_ref:
-            zip_ref.extractall(tmpdir)
+            safe_extract_zip(zip_ref, tmpdir)
 
         font_faces = []
         fonts_tmpdir = os.path.join(tmpdir, "fonts")
@@ -191,10 +212,12 @@ def process_htmlz(input_file, output_file, original_format, font_path=None, font
             os.makedirs(fonts_tmpdir, exist_ok=True)
             font_filename = os.path.basename(font_path)
             weight, style = infer_font_face(font_filename)
-            font_dest = os.path.join(fonts_tmpdir, font_filename)
+            safe_filename = safe_font_filename(1, font_filename)
+            font_dest = os.path.join(fonts_tmpdir, safe_filename)
             shutil.copy(font_path, font_dest)
             font_faces.append({
                 "filename": font_filename,
+                "safe_filename": safe_filename,
                 "weight": weight,
                 "style": style,
             })
@@ -202,9 +225,10 @@ def process_htmlz(input_file, output_file, original_format, font_path=None, font
         # Copy all matching font faces if a directory is provided.
         for face in list_font_faces(font_dir):
             os.makedirs(fonts_tmpdir, exist_ok=True)
-            shutil.copy(face["source_path"], os.path.join(fonts_tmpdir, face["filename"]))
+            shutil.copy(face["source_path"], os.path.join(fonts_tmpdir, face["safe_filename"]))
             font_faces.append({
                 "filename": face["filename"],
+                "safe_filename": face["safe_filename"],
                 "weight": face["weight"],
                 "style": face["style"],
             })
@@ -212,9 +236,10 @@ def process_htmlz(input_file, output_file, original_format, font_path=None, font
         # Apply Bionic Reading effect to all HTML files
         for root, dirs, files in os.walk(tmpdir):
             for file in files:
-                if file.endswith(".css"):
+                file_lower = file.lower()
+                if file_lower.endswith(".css"):
                     remove_fixed_line_spacing_from_css_file(os.path.join(root, file))
-                elif file.endswith(".html") or file.endswith(".htm"):
+                elif file_lower.endswith((".html", ".htm", ".xhtml")):
                     html_path = os.path.join(root, file)
                     with open(html_path, "r", encoding="utf-8") as f:
                         soup = BeautifulSoup(f, "html.parser")

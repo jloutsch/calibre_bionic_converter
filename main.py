@@ -74,9 +74,8 @@ def deduplicate_by_format(ebook_paths, preferred_format='epub'):
 
     for book_path in ebook_paths:
         book_name = os.path.basename(book_path)
-        # Remove extension and _fastread suffix to get base title
         base_name = os.path.splitext(book_name)[0]
-        base_name = base_name.replace('_fastread', '').replace(' - Fast Font', '')
+        base_name = normalize_title_text(base_name.replace('_fastread', '').replace(' - Fast Font', ''))
         file_ext = os.path.splitext(book_name)[1].lower()
 
         if base_name not in books_by_title:
@@ -333,6 +332,7 @@ def apply_bionic_reading(ebook_paths, bionic_script_name="bionic_reader.py", fon
     loader = LoadingAnimation("Converting your books now")
     loader_thread = Thread(target=loader.start)
     loader_thread.start()
+    failed_books = []
 
     try:
         for ebook_path in ebook_paths:
@@ -344,11 +344,20 @@ def apply_bionic_reading(ebook_paths, bionic_script_name="bionic_reader.py", fon
                 subprocess.run(command, check=True)  # Runs the script and checks for errors
             except subprocess.CalledProcessError as e:
                 print(f"Error processing {ebook_path}: {e}")
+                failed_books.append(ebook_path)
     finally:
         loader.stop()
         loader_thread.join()
 
-    print("Conversion completed!")
+    successful_count = len(ebook_paths) - len(failed_books)
+    if failed_books:
+        print(f"Conversion finished with {len(failed_books)} failure(s) and {successful_count} success(es).")
+        print("Failed books:")
+        for failed_book in failed_books:
+            print(f"- {failed_book}")
+        sys.exit(1)
+
+    print(f"Conversion completed successfully for {successful_count} book(s)!")
 
 if __name__ == "__main__":
     # Load Calibre library path from .env
