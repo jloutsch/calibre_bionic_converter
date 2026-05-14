@@ -171,6 +171,39 @@ def list_available_fonts(fonts_dir="fonts"):
 
     return sorted(fonts)
 
+def infer_font_face(filename):
+    name = os.path.splitext(filename)[0].lower().replace("-", "_").replace(" ", "_")
+    is_bold = "bold" in name
+    is_italic = "italic" in name or "oblique" in name
+
+    if is_bold and is_italic:
+        return "bold italic"
+    if is_bold:
+        return "bold"
+    if is_italic:
+        return "italic"
+    return "regular"
+
+def select_font_faces(fonts_dir="fonts"):
+    """
+    Selects one font file for each available face, ignoring duplicate file formats.
+
+    Returns:
+        list: Font file paths selected for embedding.
+    """
+    extension_rank = {'.woff2': 0, '.otf': 1, '.ttf': 2, '.woff': 3}
+    selected = {}
+
+    for font_path in list_available_fonts(fonts_dir):
+        filename = os.path.basename(font_path)
+        ext = os.path.splitext(filename)[1].lower()
+        face = infer_font_face(filename)
+        current = selected.get(face)
+        if current is None or extension_rank.get(ext, 99) < extension_rank.get(os.path.splitext(current)[1].lower(), 99):
+            selected[face] = font_path
+
+    return [selected[face] for face in ["regular", "bold", "italic", "bold italic"] if face in selected]
+
 def select_font_directory(fonts_dir="fonts"):
     """
     Prompts user to use all available fonts from the fonts directory.
@@ -179,6 +212,7 @@ def select_font_directory(fonts_dir="fonts"):
         str or None: Path to fonts directory, or None if default formatting should be used.
     """
     fonts = list_available_fonts(fonts_dir)
+    selected_fonts = select_font_faces(fonts_dir)
 
     if not fonts:
         print("\nNo fonts found in 'fonts/' directory.")
@@ -189,6 +223,10 @@ def select_font_directory(fonts_dir="fonts"):
         return None
 
     print(f"\nFound {len(fonts)} font file(s) in 'fonts/'.")
+    print(f"The converter will embed {len(selected_fonts)} font face(s):")
+    for font_path in selected_fonts:
+        print(f"- {infer_font_face(os.path.basename(font_path))}: {os.path.basename(font_path)}")
+
     use_fonts = input("Embed these fonts as a family for converted books? (y/n): ").strip().lower()
     if use_fonts == 'y':
         return fonts_dir
