@@ -62,6 +62,9 @@ Replace the path with the actual location of your Calibre library.
 3. Follow the prompts: 
     - The script will scan your Calibre library for eBooks and display a count of the files found.
     - If font files exist in `fonts/`, choose whether to embed them as a family. You do not need to select an individual font file.
+    - Title search matches words anywhere in the title, so `washington burning` can match `Washington Is Burning`.
+    - If title search finds no matches, you can enter another search instead of exiting.
+    - If title search finds matches, choose matching titles by number, such as `1` or `1,3`.
     - For each book, it will ask:
    ```sql
    Would you like to convert 'example_book.epub'? (y/n):

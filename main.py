@@ -1,7 +1,9 @@
 import os
+import re
 import subprocess
 import sys
 import time
+from difflib import SequenceMatcher
 from itertools import cycle
 from threading import Thread
 
@@ -88,6 +90,31 @@ def deduplicate_by_format(ebook_paths, preferred_format='epub'):
 
     return list(books_by_title.values())
 
+def normalize_title_text(text):
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+def title_matches_search(book_name, search_term):
+    normalized_title = normalize_title_text(os.path.splitext(book_name)[0])
+    normalized_search = normalize_title_text(search_term)
+
+    if not normalized_search:
+        return False
+    if normalized_search in normalized_title:
+        return True
+
+    search_words = normalized_search.split()
+    title_words = normalized_title.split()
+
+    # Match searches like "washington burning" against titles that contain both words.
+    for search_word in search_words:
+        if not any(
+            search_word == title_word or SequenceMatcher(None, search_word, title_word).ratio() >= 0.84
+            for title_word in title_words
+        ):
+            return False
+
+    return True
+
 def filter_by_title(ebook_paths, search_term):
     """
     Filters ebooks by title using a case-insensitive search.
@@ -99,15 +126,72 @@ def filter_by_title(ebook_paths, search_term):
     Returns:
         list: List of ebook paths that match the search term.
     """
-    filtered_books = []
-    search_lower = search_term.lower()
+    return [
+        book_path
+        for book_path in ebook_paths
+        if title_matches_search(os.path.basename(book_path), search_term)
+    ]
 
-    for book_path in ebook_paths:
-        book_name = os.path.basename(book_path)
-        if search_lower in book_name.lower():
-            filtered_books.append(book_path)
+def parse_number_selection(selection, max_number):
+    selected_indexes = []
 
-    return filtered_books
+    for part in selection.split(","):
+        part = part.strip()
+        if not part:
+            continue
+
+        if not part.isdigit():
+            return None
+
+        selected_number = int(part)
+        if selected_number < 1 or selected_number > max_number:
+            return None
+
+        selected_index = selected_number - 1
+        if selected_index not in selected_indexes:
+            selected_indexes.append(selected_index)
+
+    return selected_indexes
+
+def prompt_title_filter(ebook_paths):
+    while True:
+        search_term = input("Enter search term for book title (or press Enter to cancel): ").strip()
+
+        if not search_term:
+            print("Title search cancelled.")
+            return []
+
+        filtered_books = filter_by_title(ebook_paths, search_term)
+
+        if not filtered_books:
+            print(f"No books found matching '{search_term}'. Try another title.")
+            continue
+
+        print(f"\nThe following titles match '{search_term}':")
+        for index, book_path in enumerate(filtered_books, 1):
+            print(f"{index}. {os.path.basename(book_path)}")
+
+        while True:
+            selection = input(
+                "\nSelect number(s) to convert, separated by commas; "
+                "enter 'a' for all, 's' to search again, or press Enter to cancel: "
+            ).strip().lower()
+
+            if not selection:
+                print("Title search cancelled.")
+                return []
+
+            if selection == 's':
+                break
+
+            if selection == 'a':
+                return filtered_books
+
+            selected_indexes = parse_number_selection(selection, len(filtered_books))
+            if selected_indexes is not None and selected_indexes:
+                return [filtered_books[index] for index in selected_indexes]
+
+            print(f"Please enter a number between 1 and {len(filtered_books)}, comma-separated numbers, 'a', or 's'.")
 
 def prompt_user_selection(ebook_paths):
     """
@@ -305,26 +389,7 @@ if __name__ == "__main__":
         filter_choice = input("\nWould you like to filter by title? (y/n): ").strip().lower()
 
         if filter_choice == 'y':
-            search_term = input("Enter search term for book title: ").strip()
-
-            if not search_term:
-                print("Error: Search term cannot be empty. Exiting.")
-                exit(1)
-
-            ebook_paths = filter_by_title(ebook_paths, search_term)
-
-            if not ebook_paths:
-                print(f"No books found matching '{search_term}'. Exiting.")
-                exit(0)
-
-            print(f"\nFound {len(ebook_paths)} book(s) matching '{search_term}'.")
-
-            # Ask if user wants to convert all matching books
-            convert_all = input("Convert all matching books? (y/n): ").strip().lower()
-            if convert_all == 'y':
-                selected_books = ebook_paths
-            else:
-                selected_books = prompt_user_selection(ebook_paths)
+            selected_books = prompt_title_filter(ebook_paths)
         else:
             # Step 5: Ask the user which books to convert
             selected_books = prompt_user_selection(ebook_paths)
