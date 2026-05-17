@@ -8,7 +8,9 @@ pre-fix code path.
 """
 
 import os
+import shutil
 import sys
+import zipfile
 from unittest import mock
 
 import pytest
@@ -131,4 +133,52 @@ def test_log_tool_versions_missing_tool_is_not_fatal(capsys):
 
     out = capsys.readouterr().out
     assert "kepubify: not found" in out
+
+
+def _write_minimal_epub(path):
+    """Build the smallest spec-valid epub kepubify will accept."""
+    with zipfile.ZipFile(path, "w") as zf:
+        # mimetype must be first and stored (uncompressed).
+        zf.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip",
+                    compress_type=zipfile.ZIP_STORED)
+        zf.writestr("META-INF/container.xml",
+                    '<?xml version="1.0"?><container version="1.0" '
+                    'xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+                    '<rootfiles><rootfile full-path="content.opf" '
+                    'media-type="application/oebps-package+xml"/></rootfiles></container>')
+        zf.writestr("content.opf",
+                    '<?xml version="1.0"?><package '
+                    'xmlns="http://www.idpf.org/2007/opf" version="3.0" '
+                    'unique-identifier="id"><metadata '
+                    'xmlns:dc="http://purl.org/dc/elements/1.1/">'
+                    '<dc:identifier id="id">x</dc:identifier><dc:title>t</dc:title>'
+                    '<dc:language>en</dc:language></metadata><manifest>'
+                    '<item id="c" href="c.xhtml" media-type="application/xhtml+xml"/>'
+                    '</manifest><spine><itemref idref="c"/></spine></package>')
+        zf.writestr("c.xhtml",
+                    '<?xml version="1.0"?><html '
+                    'xmlns="http://www.w3.org/1999/xhtml"><body><p>hi</p></body></html>')
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(shutil.which("kepubify") is None,
+                    reason="kepubify not installed")
+def test_real_kepubify_o_file_contract(tmp_path):
+    """End-to-end check of the real `kepubify -o <file>` contract.
+
+    The unit tests mock subprocess, so nothing else catches a kepubify CLI
+    change (e.g. -o no longer accepting a full file path). This drives the
+    real binary against a real epub.
+    """
+    plain = tmp_path / "Book_fastread.epub"
+    _write_minimal_epub(plain)
+
+    result = apply_bioread.convert_to_kepub(str(plain))
+
+    expected = tmp_path / "Book_fastread.kepub.epub"
+    assert result == str(expected)
+    assert expected.is_file(), "kepubify -o <file> must produce exactly that path"
+    assert not plain.exists(), "plain intermediate must be removed"
+    with zipfile.ZipFile(expected) as zf:
+        assert zf.testzip() is None, "produced kepub must be a valid zip"
 
