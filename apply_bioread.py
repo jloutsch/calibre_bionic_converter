@@ -292,6 +292,48 @@ def process_htmlz(input_file, output_file, original_format, font_path=None, font
         subprocess.run(cmd_convert_back, check=True)
 
 
+def convert_to_kepub(epub_path):
+    """
+    Converts a plain ``.epub`` to Kobo's ``.kepub.epub`` format using kepubify.
+
+    Plain ``application/epub+zip`` files are rendered on Kobo devices by the
+    legacy Adobe RMSDK engine, which freezes on the heavy calibre + bionic
+    markup this tool produces (observed: nickel UI thread hangs, the sickel
+    watchdog kills and restarts the reader). Kobo's ``.kepub.epub`` files use
+    the modern HTML renderer instead, which handles this markup without
+    freezing. We wrap the external ``kepubify`` binary here so the rest of the
+    pipeline never calls it directly.
+
+    On success the intermediate plain epub is removed so the fragile format is
+    never delivered to the device.
+
+    Parameters:
+        epub_path (str): Path to the plain ``.epub`` produced by the pipeline.
+
+    Returns:
+        str: Path to the produced ``.kepub.epub`` file.
+    """
+    if shutil.which("kepubify") is None:
+        print(
+            "Missing dependency: kepubify. The plain-epub output left at "
+            f"'{epub_path}' freezes Kobo devices and must NOT be sideloaded.\n"
+            "Install it and re-run: brew install kepubify"
+        )
+        sys.exit(1)
+
+    base, _ = os.path.splitext(epub_path)
+    kepub_path = f"{base}.kepub.epub"
+    subprocess.run(["kepubify", "-o", kepub_path, epub_path], check=True)
+
+    if not os.path.isfile(kepub_path):
+        print(f"kepubify did not produce expected output at '{kepub_path}'.")
+        sys.exit(1)
+
+    # Drop the fragile intermediate so it can never reach the device.
+    os.remove(epub_path)
+    return kepub_path
+
+
 def main():
     parser = argparse.ArgumentParser(description='Apply Bionic Reading formatting to ebooks')
     parser.add_argument('input_file', help='Path to the ebook file to process')
@@ -316,6 +358,11 @@ def main():
 
     output_file = f"{file_name}_fastread{file_ext}"
     process_htmlz(input_file, output_file, file_ext.lower()[1:], font_path=font_path, font_dir=font_dir)
+
+    # Plain .epub freezes Kobo's legacy renderer; ship .kepub.epub instead.
+    if file_ext.lower() == ".epub":
+        output_file = convert_to_kepub(output_file)
+
     print(f"Processed file saved as {output_file}")
 
 
