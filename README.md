@@ -11,6 +11,7 @@ This script scans your Calibre library for eBooks, allows you to select which bo
 4. Optionally embeds the font family from `fonts/`, using regular, bold, italic, and bold italic faces where appropriate.
 5. Removes fixed `line-height` styling so ereader line spacing controls can still work.
 6. Provides a visual loading spinner during the conversion process.
+7. Outputs Kobo-safe `.kepub.epub` for epub inputs (via `kepubify`). Plain `.epub` output freezes Kobo's legacy renderer on this tool's markup, so the fragile intermediate is converted and removed automatically.
 
 ---
 
@@ -29,6 +30,12 @@ This script scans your Calibre library for eBooks, allows you to select which bo
 3. **Dependencies**: Install required Python libraries using:
    ```bash
    python -m pip install -r requirements.txt
+   ```
+   **`kepubify`** (required for epub conversion): produces the Kobo-safe
+   `.kepub.epub`. Without it, epub conversions fail loudly rather than ship
+   the plain epub that freezes Kobo devices.
+   ```bash
+   brew install kepubify
    ```
 4. Calibre Library Path: Ensure your .env file includes the following:
    ```bash
