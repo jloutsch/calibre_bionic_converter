@@ -292,6 +292,36 @@ def process_htmlz(input_file, output_file, original_format, font_path=None, font
         subprocess.run(cmd_convert_back, check=True)
 
 
+# The single-file `-o <file>` output contract this tool relies on was
+# verified on kepubify 4.x. Guard against older majors that behave differently.
+MIN_KEPUBIFY_MAJOR = 4
+
+
+def _tool_version(command):
+    """Return the first line of ``<command> --version``, or None.
+
+    Best-effort and never raises: used only for version logging and the
+    kepubify guard, so a missing/odd tool degrades gracefully.
+    """
+    try:
+        result = subprocess.run(
+            list(command) + ["--version"],
+            capture_output=True, text=True, check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    output = (result.stdout or result.stderr or "").strip()
+    return output.splitlines()[0] if output else None
+
+
+def _kepubify_major(version_line):
+    """Extract the integer major version from a ``kepubify X.Y.Z`` line."""
+    if not version_line:
+        return None
+    match = re.search(r"(\d+)\.\d+", version_line)
+    return int(match.group(1)) if match else None
+
+
 def convert_to_kepub(epub_path):
     """
     Converts a plain ``.epub`` to Kobo's ``.kepub.epub`` format using kepubify.
@@ -318,6 +348,16 @@ def convert_to_kepub(epub_path):
             "Missing dependency: kepubify. The plain-epub output left at "
             f"'{epub_path}' freezes Kobo devices and must NOT be sideloaded.\n"
             "Install it and re-run: brew install kepubify"
+        )
+        sys.exit(1)
+
+    version_line = _tool_version(["kepubify"])
+    major = _kepubify_major(version_line)
+    if major is not None and major < MIN_KEPUBIFY_MAJOR:
+        print(
+            f"kepubify '{version_line}' is too old. This tool relies on the "
+            f"-o <file> output contract verified on {MIN_KEPUBIFY_MAJOR}.x. "
+            "Upgrade and re-run: brew upgrade kepubify"
         )
         sys.exit(1)
 

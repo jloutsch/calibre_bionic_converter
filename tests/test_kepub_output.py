@@ -36,8 +36,9 @@ def test_main_emits_kepub_and_removes_plain_epub(tmp_path):
     kepub = tmp_path / "Book_fastread.kepub.epub"
 
     def fake_run(cmd, check=False, **kwargs):
-        # The only subprocess in the patched path is kepubify.
         assert cmd[0] == "kepubify"
+        if "--version" in cmd:
+            return mock.Mock(returncode=0, stdout="kepubify 4.0.4\n", stderr="")
         out_path = cmd[cmd.index("-o") + 1]
         with open(out_path, "wb") as handle:
             handle.write(b"PK\x03\x04 kepub bytes")
@@ -84,3 +85,26 @@ def test_non_epub_output_is_left_untouched(tmp_path):
 
     conv.assert_not_called()
     assert produced.is_file()
+
+
+def test_old_kepubify_major_is_rejected(tmp_path):
+    """A kepubify older than the verified -o <file> contract must fail loudly."""
+    book = tmp_path / "Book.epub"
+    book.write_bytes(b"PK\x03\x04 source")
+    plain = tmp_path / "Book_fastread.epub"
+
+    def fake_run(cmd, check=False, **kwargs):
+        assert "--version" in cmd, "must reject before invoking conversion"
+        return mock.Mock(returncode=0, stdout="kepubify 3.1.6\n", stderr="")
+
+    with mock.patch.object(apply_bioread, "process_htmlz",
+                           _fake_process_htmlz(str(plain))), \
+         mock.patch.object(apply_bioread.shutil, "which", return_value="/usr/bin/kepubify"), \
+         mock.patch.object(apply_bioread.subprocess, "run", side_effect=fake_run), \
+         mock.patch.object(sys, "argv", ["apply_bioread.py", str(book)]):
+        with pytest.raises(SystemExit) as exc:
+            apply_bioread.main()
+
+    assert exc.value.code == 1
+    assert plain.exists(), "plain epub kept so the failure is recoverable"
+
