@@ -322,6 +322,19 @@ def _kepubify_major(version_line):
     return int(match.group(1)) if match else None
 
 
+def log_tool_versions():
+    """Print the external converter versions a run depends on.
+
+    Output is reproducibility-critical: a calibre or kepubify upgrade can
+    silently change the produced ebook (CACE), so each run records which
+    tool versions made it.
+    """
+    for label, binary in (("calibre ebook-convert", "ebook-convert"),
+                           ("kepubify", "kepubify")):
+        version = _tool_version([binary]) if shutil.which(binary) else None
+        print(f"[tool] {label}: {version or 'not found'}")
+
+
 def convert_to_kepub(epub_path):
     """
     Converts a plain ``.epub`` to Kobo's ``.kepub.epub`` format using kepubify.
@@ -403,6 +416,8 @@ def main():
     if file_ext.lower() not in supported_formats:
         print("Supported input formats are .epub, .mobi, and .azw3.")
         sys.exit(1)
+
+    log_tool_versions()
 
     output_file = f"{file_name}_fastread{file_ext}"
     process_htmlz(input_file, output_file, file_ext.lower()[1:], font_path=font_path, font_dir=font_dir)

@@ -36,9 +36,10 @@ def test_main_emits_kepub_and_removes_plain_epub(tmp_path):
     kepub = tmp_path / "Book_fastread.kepub.epub"
 
     def fake_run(cmd, check=False, **kwargs):
-        assert cmd[0] == "kepubify"
         if "--version" in cmd:
-            return mock.Mock(returncode=0, stdout="kepubify 4.0.4\n", stderr="")
+            # log_tool_versions() probes ebook-convert and kepubify.
+            return mock.Mock(returncode=0, stdout=f"{cmd[0]} 4.0.4\n", stderr="")
+        assert cmd[0] == "kepubify"
         out_path = cmd[cmd.index("-o") + 1]
         with open(out_path, "wb") as handle:
             handle.write(b"PK\x03\x04 kepub bytes")
@@ -79,6 +80,7 @@ def test_non_epub_output_is_left_untouched(tmp_path):
 
     with mock.patch.object(apply_bioread, "process_htmlz",
                            _fake_process_htmlz(str(produced))), \
+         mock.patch.object(apply_bioread, "log_tool_versions"), \
          mock.patch.object(apply_bioread, "convert_to_kepub") as conv, \
          mock.patch.object(sys, "argv", ["apply_bioread.py", str(book)]):
         apply_bioread.main()
@@ -107,4 +109,26 @@ def test_old_kepubify_major_is_rejected(tmp_path):
 
     assert exc.value.code == 1
     assert plain.exists(), "plain epub kept so the failure is recoverable"
+
+
+def test_log_tool_versions_records_both_tools(capsys):
+    """Each run must record the calibre + kepubify versions it depended on."""
+    def fake_run(cmd, check=False, **kwargs):
+        return mock.Mock(returncode=0, stdout=f"{cmd[0]} 9.9.9\n", stderr="")
+
+    with mock.patch.object(apply_bioread.shutil, "which", return_value="/bin/x"), \
+         mock.patch.object(apply_bioread.subprocess, "run", side_effect=fake_run):
+        apply_bioread.log_tool_versions()
+
+    out = capsys.readouterr().out
+    assert "calibre ebook-convert: ebook-convert 9.9.9" in out
+    assert "kepubify: kepubify 9.9.9" in out
+
+
+def test_log_tool_versions_missing_tool_is_not_fatal(capsys):
+    with mock.patch.object(apply_bioread.shutil, "which", return_value=None):
+        apply_bioread.log_tool_versions()  # must not raise
+
+    out = capsys.readouterr().out
+    assert "kepubify: not found" in out
 
