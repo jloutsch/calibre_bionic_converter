@@ -323,7 +323,15 @@ def convert_to_kepub(epub_path):
 
     base, _ = os.path.splitext(epub_path)
     kepub_path = f"{base}.kepub.epub"
-    subprocess.run(["kepubify", "-o", kepub_path, epub_path], check=True)
+    try:
+        subprocess.run(["kepubify", "-o", kepub_path, epub_path], check=True)
+    except subprocess.CalledProcessError as error:
+        print(
+            f"kepubify failed (exit {error.returncode}) converting "
+            f"'{epub_path}'. The plain epub is kept so the run is recoverable, "
+            "but it freezes Kobo devices and must NOT be sideloaded as-is."
+        )
+        sys.exit(1)
 
     if not os.path.isfile(kepub_path):
         print(f"kepubify did not produce expected output at '{kepub_path}'.")
