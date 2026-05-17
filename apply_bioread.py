@@ -292,6 +292,49 @@ def process_htmlz(input_file, output_file, original_format, font_path=None, font
         subprocess.run(cmd_convert_back, check=True)
 
 
+# The single-file `-o <file>` output contract this tool relies on was
+# verified on kepubify 4.x. Guard against older majors that behave differently.
+MIN_KEPUBIFY_MAJOR = 4
+
+
+def _tool_version(command):
+    """Return the first line of ``<command> --version``, or None.
+
+    Best-effort and never raises: used only for version logging and the
+    kepubify guard, so a missing/odd tool degrades gracefully.
+    """
+    try:
+        result = subprocess.run(
+            list(command) + ["--version"],
+            capture_output=True, text=True, check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    output = (result.stdout or result.stderr or "").strip()
+    return output.splitlines()[0] if output else None
+
+
+def _kepubify_major(version_line):
+    """Extract the integer major version from a ``kepubify X.Y.Z`` line."""
+    if not version_line:
+        return None
+    match = re.search(r"(\d+)\.\d+", version_line)
+    return int(match.group(1)) if match else None
+
+
+def log_tool_versions():
+    """Print the external converter versions a run depends on.
+
+    Output is reproducibility-critical: a calibre or kepubify upgrade can
+    silently change the produced ebook (CACE), so each run records which
+    tool versions made it.
+    """
+    for label, binary in (("calibre ebook-convert", "ebook-convert"),
+                           ("kepubify", "kepubify")):
+        version = _tool_version([binary]) if shutil.which(binary) else None
+        print(f"[tool] {label}: {version or 'not found'}")
+
+
 def convert_to_kepub(epub_path):
     """
     Converts a plain ``.epub`` to Kobo's ``.kepub.epub`` format using kepubify.
@@ -321,9 +364,27 @@ def convert_to_kepub(epub_path):
         )
         sys.exit(1)
 
+    version_line = _tool_version(["kepubify"])
+    major = _kepubify_major(version_line)
+    if major is not None and major < MIN_KEPUBIFY_MAJOR:
+        print(
+            f"kepubify '{version_line}' is too old. This tool relies on the "
+            f"-o <file> output contract verified on {MIN_KEPUBIFY_MAJOR}.x. "
+            "Upgrade and re-run: brew upgrade kepubify"
+        )
+        sys.exit(1)
+
     base, _ = os.path.splitext(epub_path)
     kepub_path = f"{base}.kepub.epub"
-    subprocess.run(["kepubify", "-o", kepub_path, epub_path], check=True)
+    try:
+        subprocess.run(["kepubify", "-o", kepub_path, epub_path], check=True)
+    except subprocess.CalledProcessError as error:
+        print(
+            f"kepubify failed (exit {error.returncode}) converting "
+            f"'{epub_path}'. The plain epub is kept so the run is recoverable, "
+            "but it freezes Kobo devices and must NOT be sideloaded as-is."
+        )
+        sys.exit(1)
 
     if not os.path.isfile(kepub_path):
         print(f"kepubify did not produce expected output at '{kepub_path}'.")
@@ -355,6 +416,8 @@ def main():
     if file_ext.lower() not in supported_formats:
         print("Supported input formats are .epub, .mobi, and .azw3.")
         sys.exit(1)
+
+    log_tool_versions()
 
     output_file = f"{file_name}_fastread{file_ext}"
     process_htmlz(input_file, output_file, file_ext.lower()[1:], font_path=font_path, font_dir=font_dir)
