@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import subprocess
@@ -6,6 +7,50 @@ import time
 from difflib import SequenceMatcher
 from itertools import cycle
 from threading import Thread
+
+
+# Issue #19: ask ONCE whether the user is mainly converting for a Kobo,
+# remember it, and pass it down as --target. The core (apply_bioread.py)
+# stays non-interactive; this interactive ask + persistence lives here.
+_CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config",
+                           "calibre_bionic_converter")
+_CONFIG_PATH = os.path.join(_CONFIG_DIR, "config.json")
+
+
+def _load_config():
+    try:
+        with open(_CONFIG_PATH, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_config(data):
+    # Home-dir config: 0700 dir / 0600 file (code-standards).
+    os.makedirs(_CONFIG_DIR, mode=0o700, exist_ok=True)
+    fd = os.open(_CONFIG_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(data, fh)
+
+
+def resolve_target_preference():
+    """Return 'kobo' or 'generic', asking once and remembering it (#19)."""
+    cfg = _load_config()
+    target = cfg.get("target")
+    if target in ("kobo", "generic"):
+        return target
+    answer = input(
+        "\nAre you mainly converting these ebooks to read on a Kobo? (y/n): "
+    ).strip().lower()
+    target = "kobo" if answer == "y" else "generic"
+    cfg["target"] = target
+    try:
+        _save_config(cfg)
+        print(f"Saved preference: {target} (edit {_CONFIG_PATH} to change).")
+    except OSError:
+        print(f"(Could not persist preference; using {target} this run.)")
+    return target
 
 try:
     from dotenv import load_dotenv
@@ -317,7 +362,7 @@ def select_font_directory(fonts_dir="fonts"):
     print("Using default bold formatting")
     return None
 
-def apply_bionic_reading(ebook_paths, bionic_script_name="bionic_reader.py", font_dir=None):
+def apply_bionic_reading(ebook_paths, bionic_script_name="bionic_reader.py", font_dir=None, target="kobo"):
     """
     Applies Bionic Reading typography to each ebook using the script from the repository.
 
@@ -337,10 +382,13 @@ def apply_bionic_reading(ebook_paths, bionic_script_name="bionic_reader.py", fon
     try:
         for ebook_path in ebook_paths:
             try:
-                # Call the Bionic Reading script with the current ebook as input
-                command = [sys.executable, bionic_script_name, ebook_path]
+                # Call the Bionic Reading script with the current ebook as
+                # input. Absolutise the auto-walked library path so a name
+                # like "-x.epub" can't be parsed as an option (issue #22).
+                command = [sys.executable, bionic_script_name,
+                           os.path.abspath(ebook_path), "--target", target]
                 if font_dir:
-                    command.extend(["--font-dir", font_dir])
+                    command.extend(["--font-dir", os.path.abspath(font_dir)])
                 subprocess.run(command, check=True)  # Runs the script and checks for errors
             except subprocess.CalledProcessError as e:
                 print(f"Error processing {ebook_path}: {e}")
@@ -411,5 +459,9 @@ if __name__ == "__main__":
             # Step 6: Select font handling for conversion
             selected_font_dir = select_font_directory()
 
-            # Step 7: Apply Bionic Reading to the selected books
-            apply_bionic_reading(selected_books, bionic_script_name, font_dir=selected_font_dir)
+            # Step 7: Kobo vs generic target (asked once, remembered) (#19)
+            target = resolve_target_preference()
+
+            # Step 8: Apply Bionic Reading to the selected books
+            apply_bionic_reading(selected_books, bionic_script_name,
+                                 font_dir=selected_font_dir, target=target)

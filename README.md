@@ -11,7 +11,8 @@ This script scans your Calibre library for eBooks, allows you to select which bo
 4. Optionally embeds the font family from `fonts/`, using regular, bold, italic, and bold italic faces where appropriate.
 5. Removes fixed `line-height` styling so ereader line spacing controls can still work.
 6. Provides a visual loading spinner during the conversion process.
-7. Outputs Kobo-safe `.kepub.epub` for epub inputs (via `kepubify`). Plain `.epub` output freezes Kobo's legacy renderer on this tool's markup, so the fragile intermediate is converted and removed automatically.
+7. Outputs Kobo-safe `.kepub.epub` for epub inputs. `kepubify` runs *before* the bionic transform so each chapter stays one light document: chapters open fast, the chapter art/number/TOC line up, and "time left in chapter" is correct. Choose `--target generic` (or answer "no" to the one-time "mainly for Kobo?" prompt) to get a plain bionic `.epub` with no koboSpans for Kindle/Boox/Apple Books instead.
+8. Skips re-converting a book whose content, tools, and settings are unchanged (cached).
 
 ---
 
@@ -68,6 +69,7 @@ Replace the path with the actual location of your Calibre library.
    ```
 3. Follow the prompts: 
     - The script will scan your Calibre library for eBooks and display a count of the files found.
+    - The first run asks once whether you mainly read on a Kobo; the answer is remembered in `~/.config/calibre_bionic_converter/config.json` and decides Kobo (`.kepub.epub`) vs generic (`.epub`) output. Override per run with `--target kobo|generic` on `apply_bioread.py`.
     - If font files exist in `fonts/`, choose whether to embed them as a family. You do not need to select an individual font file.
     - Title search matches words anywhere in the title, so `washington burning` can match `Washington Is Burning`.
     - If title search finds no matches, you can enter another search instead of exiting.
