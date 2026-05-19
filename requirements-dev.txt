@@ -1,1 +1,2 @@
-pytest
+# Pinned exactly (issue #26).
+pytest==9.0.3

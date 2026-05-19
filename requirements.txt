@@ -1,2 +1,5 @@
-python-dotenv
-beautifulsoup4
+# Pinned exactly for reproducibility + supply-chain safety (issue #26).
+# Bump deliberately; CACE: re-run the test suite after any change.
+beautifulsoup4==4.14.2
+soupsieve==2.8
+python-dotenv==1.1.1
