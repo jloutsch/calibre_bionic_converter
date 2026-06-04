@@ -159,13 +159,26 @@ def title_matches_search(book_name, search_term):
 
     return True
 
+
+def book_matches_search(book_path, search_term):
+    """Match search term against filename (title) and parent dir (author)."""
+    if title_matches_search(os.path.basename(book_path), search_term):
+        return True
+    # Calibre layout: Library/Author Name/Book Title (id)/file.epub
+    # The author is the grandparent directory of the file.
+    author_dir = os.path.basename(os.path.dirname(os.path.dirname(book_path)))
+    if author_dir and title_matches_search(author_dir, search_term):
+        return True
+    return False
+
+
 def filter_by_title(ebook_paths, search_term):
     """
-    Filters ebooks by title using a case-insensitive search.
+    Filters ebooks by title or author using a case-insensitive search.
 
     Parameters:
         ebook_paths (list): List of ebook file paths.
-        search_term (str): Search term to filter titles.
+        search_term (str): Search term to filter titles or authors.
 
     Returns:
         list: List of ebook paths that match the search term.
@@ -173,7 +186,7 @@ def filter_by_title(ebook_paths, search_term):
     return [
         book_path
         for book_path in ebook_paths
-        if title_matches_search(os.path.basename(book_path), search_term)
+        if book_matches_search(book_path, search_term)
     ]
 
 def parse_number_selection(selection, max_number):
@@ -199,7 +212,7 @@ def parse_number_selection(selection, max_number):
 
 def prompt_title_filter(ebook_paths):
     while True:
-        search_term = input("Enter search term for book title (or press Enter to cancel): ").strip()
+        search_term = input("Enter search term for book title or author (or press Enter to cancel): ").strip()
 
         if not search_term:
             print("Title search cancelled.")
@@ -407,6 +420,58 @@ def apply_bionic_reading(ebook_paths, bionic_script_name="bionic_reader.py", fon
 
     print(f"Conversion completed successfully for {successful_count} book(s)!")
 
+def run_conversion_flow(calibre_library_path, bionic_script_name):
+    # Step 1: Find all ebooks in the Calibre library
+    ebook_paths = find_ebooks_in_calibre_library(calibre_library_path)
+
+    if not ebook_paths:
+        print("No ebooks found in the specified Calibre library.")
+        return
+
+    print(f"\nFound {len(ebook_paths)} ebooks in your library.")
+
+    # Step 2: Exclude already-converted books (optional)
+    exclude_choice = input("\nExclude already-converted books (with '_fastread' or 'Fast Font')? (y/n): ").strip().lower()
+    if exclude_choice == 'y':
+        original_count = len(ebook_paths)
+        ebook_paths = exclude_converted_books(ebook_paths)
+        excluded_count = original_count - len(ebook_paths)
+        print(f"Excluded {excluded_count} already-converted book(s). {len(ebook_paths)} remaining.")
+
+    # Step 3: Remove duplicate formats (optional)
+    dedup_choice = input("\nRemove duplicate formats (keep one per book, prefer epub)? (y/n): ").strip().lower()
+    if dedup_choice == 'y':
+        original_count = len(ebook_paths)
+        ebook_paths = deduplicate_by_format(ebook_paths, preferred_format='epub')
+        dedup_count = original_count - len(ebook_paths)
+        print(f"Removed {dedup_count} duplicate(s). {len(ebook_paths)} unique book(s) remaining.")
+
+    # Step 4: Filter by title or author (optional)
+    filter_choice = input("\nWould you like to filter by title or author? (y/n): ").strip().lower()
+
+    if filter_choice == 'y':
+        selected_books = prompt_title_filter(ebook_paths)
+    else:
+        # Step 5: Ask the user which books to convert
+        selected_books = prompt_user_selection(ebook_paths)
+
+    if not selected_books:
+        print("No books selected for conversion.")
+        return
+
+    print(f"\nYou selected {len(selected_books)} book(s) for conversion.")
+
+    # Step 6: Select font handling for conversion
+    selected_font_dir = select_font_directory()
+
+    # Step 7: Kobo vs generic target (asked once, remembered) (#19)
+    target = resolve_target_preference()
+
+    # Step 8: Apply Bionic Reading to the selected books
+    apply_bionic_reading(selected_books, bionic_script_name,
+                         font_dir=selected_font_dir, target=target)
+
+
 if __name__ == "__main__":
     # Load Calibre library path from .env
     calibre_library_path = os.getenv("CALIBRE_LIBRARY_PATH")
@@ -418,50 +483,8 @@ if __name__ == "__main__":
     # Script name for Bionic Reading (must exist in the same directory as this script)
     bionic_script_name = "apply_bioread.py"
 
-    # Step 1: Find all ebooks in the Calibre library
-    ebook_paths = find_ebooks_in_calibre_library(calibre_library_path)
-
-    if not ebook_paths:
-        print("No ebooks found in the specified Calibre library.")
-    else:
-        print(f"\nFound {len(ebook_paths)} ebooks in your library.")
-
-        # Step 2: Exclude already-converted books (optional)
-        exclude_choice = input("\nExclude already-converted books (with '_fastread' or 'Fast Font')? (y/n): ").strip().lower()
-        if exclude_choice == 'y':
-            original_count = len(ebook_paths)
-            ebook_paths = exclude_converted_books(ebook_paths)
-            excluded_count = original_count - len(ebook_paths)
-            print(f"Excluded {excluded_count} already-converted book(s). {len(ebook_paths)} remaining.")
-
-        # Step 3: Remove duplicate formats (optional)
-        dedup_choice = input("\nRemove duplicate formats (keep one per book, prefer epub)? (y/n): ").strip().lower()
-        if dedup_choice == 'y':
-            original_count = len(ebook_paths)
-            ebook_paths = deduplicate_by_format(ebook_paths, preferred_format='epub')
-            dedup_count = original_count - len(ebook_paths)
-            print(f"Removed {dedup_count} duplicate(s). {len(ebook_paths)} unique book(s) remaining.")
-
-        # Step 4: Filter by title (optional)
-        filter_choice = input("\nWould you like to filter by title? (y/n): ").strip().lower()
-
-        if filter_choice == 'y':
-            selected_books = prompt_title_filter(ebook_paths)
-        else:
-            # Step 5: Ask the user which books to convert
-            selected_books = prompt_user_selection(ebook_paths)
-
-        if not selected_books:
-            print("No books selected for conversion. Exiting.")
-        else:
-            print(f"\nYou selected {len(selected_books)} book(s) for conversion.")
-
-            # Step 6: Select font handling for conversion
-            selected_font_dir = select_font_directory()
-
-            # Step 7: Kobo vs generic target (asked once, remembered) (#19)
-            target = resolve_target_preference()
-
-            # Step 8: Apply Bionic Reading to the selected books
-            apply_bionic_reading(selected_books, bionic_script_name,
-                                 font_dir=selected_font_dir, target=target)
+    while True:
+        run_conversion_flow(calibre_library_path, bionic_script_name)
+        again = input("\nWould you like to convert another book? (y/n): ").strip().lower()
+        if again != 'y':
+            break
